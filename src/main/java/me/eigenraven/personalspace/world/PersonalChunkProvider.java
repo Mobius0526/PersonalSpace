@@ -122,19 +122,22 @@ public class PersonalChunkProvider implements IChunkProvider {
                 }
             }
 
-            boolean isBoundaryX, prevBoundaryX, isBoundaryZ, prevBoundaryZ;
+            // 最终版：单侧边界 + 奇数宽度区域
+            boolean isBoundaryX = false;
+            boolean isBoundaryZ = false;
+            boolean prevBoundaryX = false;
+            boolean prevBoundaryZ = false;
+
             if (gapWidth > 0) {
-                // isBoundaryX: draw at localX=0 → first area chunk after gap (mod == 0)
                 isBoundaryX = intervalX > 0 && mod(chunkX, periodX) == 0;
-                // prevBoundaryX: draw at localX=15 → last area chunk before gap (mod == interval-1)
-                prevBoundaryX = intervalX > 0 && mod(chunkX, periodX) == intervalX - 1;
                 isBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == 0;
-                prevBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == intervalZ - 1;
+                prevBoundaryX = false;
+                prevBoundaryZ = false;
             } else {
                 isBoundaryX = intervalX > 0 && mod(chunkX, intervalX) == 0;
                 isBoundaryZ = intervalZ > 0 && mod(chunkZ, intervalZ) == 0;
-                prevBoundaryX = intervalX > 0 && mod(chunkX + 1, intervalX) == 0;
-                prevBoundaryZ = intervalZ > 0 && mod(chunkZ + 1, intervalZ) == 0;
+                prevBoundaryX = false;
+                prevBoundaryZ = false;
             }
 
             Block boundaryBlockA = cfg.getBoundaryBlockAResolved();
@@ -237,30 +240,30 @@ public class PersonalChunkProvider implements IChunkProvider {
                 }
             }
 
-            // --- Center block generation ---
+            // --- Center block generation --- 适配奇数宽度完美正中心
             if (cfg.isCenterEnabled() && intervalX > 0 && intervalZ > 0) {
                 Block centerBlock = cfg.getCenterBlockResolved();
                 int centerMeta = cfg.getCenterMeta();
                 if (centerBlock != null && centerBlock != Blocks.air) {
-                    DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
-                    int dirOffX = (dir == DimensionConfig.CenterDirection.SW
-                            || dir == DimensionConfig.CenterDirection.NW) ? -1 : 0;
-                    int dirOffZ = (dir == DimensionConfig.CenterDirection.NE
-                            || dir == DimensionConfig.CenterDirection.NW) ? -1 : 0;
-                    int centerLocalX = intervalX * 8 + dirOffX;
-                    int centerLocalZ = intervalZ * 8 + dirOffZ;
-
                     int modCX = mod(chunkX, periodX);
                     int modCZ = mod(chunkZ, periodZ);
 
                     if (modCX < intervalX && modCZ < intervalZ) {
+                        int regionWidthBlocks = intervalX * 16;
+                        int regionDepthBlocks = intervalZ * 16;
+
+                        int centerRegionX = regionWidthBlocks / 2;
+                        int centerRegionZ = regionDepthBlocks / 2;
+
                         int blockStartX = modCX * 16;
                         int blockStartZ = modCZ * 16;
-                        if (centerLocalX >= blockStartX && centerLocalX < blockStartX + 16
-                                && centerLocalZ >= blockStartZ
-                                && centerLocalZ < blockStartZ + 16) {
-                            int lx = centerLocalX - blockStartX;
-                            int lz = centerLocalZ - blockStartZ;
+
+                        if (centerRegionX >= blockStartX && centerRegionX < blockStartX + 16
+                            && centerRegionZ >= blockStartZ && centerRegionZ < blockStartZ + 16) {
+
+                            int lx = centerRegionX - blockStartX;
+                            int lz = centerRegionZ - blockStartZ;
+
                             for (int surfaceLevel : surfaceLevels) {
                                 int yChunk = surfaceLevel >> 4;
                                 int yLocal = surfaceLevel & 15;
@@ -321,8 +324,6 @@ public class PersonalChunkProvider implements IChunkProvider {
         }
 
         List<Integer> surfaceLevels = new ArrayList<>();
-        // A surface layer is a non-air layer with air directly above it.
-        // In air;stone*3;air, only the top stone layer is a surface layer.
         for (int y = 0; y < worldHeight; y++) {
             if (solid[y] && (y + 1 >= worldHeight || !solid[y + 1])) {
                 surfaceLevels.add(y);
@@ -395,7 +396,6 @@ public class PersonalChunkProvider implements IChunkProvider {
                     boolean isIntersection = isGapX && isGapZ;
                     boolean hasStripe = gapBlockB != null && gapBlockB != Blocks.air;
                     if (isIntersection) {
-                        // At intersection: draw corner blocks where both edges meet
                         if (hasStripe) {
                             int gapOffsetX = mod(chunkX, periodX) - intervalX;
                             int offsetX = gapOffsetX * 16 + localX;
@@ -412,39 +412,25 @@ public class PersonalChunkProvider implements IChunkProvider {
                         if (isGapX && periodX > 0) {
                             int gapChunkOffset = mod(chunkX, periodX) - intervalX;
                             int offsetInGap = gapChunkOffset * 16 + localX;
+                            boolean isMainAxisRoad = (chunkZ == 0);
                             StripeBlock road = getRoadBlock(
-                                    offsetInGap,
-                                    worldZ,
-                                    gapWidthBlocks,
-                                    gapBlockA,
-                                    gapMetaA,
-                                    gapBlockB,
-                                    gapMetaB,
-                                    gapBlockC,
-                                    gapMetaC);
+                                    offsetInGap, worldZ, gapWidthBlocks,
+                                    gapBlockA, gapMetaA, gapBlockB, gapMetaB, gapBlockC, gapMetaC,
+                                    true, isMainAxisRoad);
                             block = road.block;
                             meta = road.meta;
                         } else if (isGapZ && periodZ > 0) {
                             int gapChunkOffset = mod(chunkZ, periodZ) - intervalZ;
                             int offsetInGap = gapChunkOffset * 16 + localZ;
+                            boolean isMainAxisRoad = (chunkX == 0);
                             StripeBlock road = getRoadBlock(
-                                    offsetInGap,
-                                    worldX,
-                                    gapWidthBlocks,
-                                    gapBlockA,
-                                    gapMetaA,
-                                    gapBlockB,
-                                    gapMetaB,
-                                    gapBlockC,
-                                    gapMetaC);
+                                    offsetInGap, worldX, gapWidthBlocks,
+                                    gapBlockA, gapMetaA, gapBlockB, gapMetaB, gapBlockC, gapMetaC,
+                                    false, isMainAxisRoad);
                             block = road.block;
                             meta = road.meta;
                         }
                     }
-                } else {
-                    // SOLID preset: use block A with configured meta
-                    block = gapBlockA;
-                    meta = gapMetaA;
                 }
 
                 if (block != null && block != Blocks.air) {
@@ -455,20 +441,39 @@ public class PersonalChunkProvider implements IChunkProvider {
         }
     }
 
-    private StripeBlock getRoadBlock(int offsetInGap, int alongRoad, int gapWidthBlocks, Block blockA, int metaA,
-            Block blockB, int metaB, Block blockC, int metaC) {
+    // 新版：奇数宽度公路 + 主轴(XZ)双线 + 普通道路单线
+    private StripeBlock getRoadBlock(int offsetInGap, int alongRoad, int gapWidthBlocks,
+                                     Block blockA, int metaA, Block blockB, int metaB,
+                                     Block blockC, int metaC,
+                                     boolean isXRoad, boolean isMainAxisRoad) {
         boolean hasStripe = blockB != null && blockB != Blocks.air;
         boolean hasDash = blockC != null && blockC != Blocks.air;
 
-        // Edge lines (B block)
-        if (hasStripe && (offsetInGap == 0 || offsetInGap == gapWidthBlocks - 1)) {
-            return new StripeBlock(blockB, metaB);
+        int roadWidth = (gapWidthBlocks % 2 == 0) ? gapWidthBlocks - 1 : gapWidthBlocks;
+        offsetInGap = Math.min(offsetInGap, roadWidth - 1);
+
+        if (isMainAxisRoad) {
+            if (hasStripe) {
+                if (offsetInGap == 0 || offsetInGap == 1 ||
+                    offsetInGap == roadWidth - 1 || offsetInGap == roadWidth - 2) {
+                    return new StripeBlock(blockB, metaB);
+                }
+            }
+            if (hasDash && roadWidth >= 5) {
+                int center = roadWidth / 2;
+                if ((offsetInGap == center || offsetInGap == center + 1) && mod(alongRoad + 2, 8) < 5) {
+                    return new StripeBlock(blockC, metaC);
+                }
+            }
+            return new StripeBlock(blockA, metaA);
         }
 
-        // Center dashed line (C block)
-        if (hasDash && gapWidthBlocks >= 4) {
-            int center = gapWidthBlocks / 2;
-            if ((offsetInGap == center || offsetInGap == center - 1) && mod(alongRoad + 2, 8) < 4) {
+        if (hasStripe && (offsetInGap == 0 || offsetInGap == roadWidth - 1)) {
+            return new StripeBlock(blockB, metaB);
+        }
+        if (hasDash && roadWidth >= 3) {
+            int center = roadWidth / 2;
+            if (offsetInGap == center && mod(alongRoad + 2, 8) < 4) {
                 return new StripeBlock(blockC, metaC);
             }
         }
@@ -534,7 +539,6 @@ public class PersonalChunkProvider implements IChunkProvider {
         return Collections.emptyList();
     }
 
-    // findClosestStructure
     @Override
     public ChunkPosition func_147416_a(World world, String structureType, int x, int y, int z) {
         return null;
