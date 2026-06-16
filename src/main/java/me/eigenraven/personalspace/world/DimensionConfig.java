@@ -155,7 +155,9 @@ public class DimensionConfig {
         SE, // x+ z+ (default)
         SW, // x- z+
         NE, // x+ z-
-        NW; // x- z-
+        NW, // x- z-
+        ORIGIN,
+        AWAY_ORIGIN;
 
         CenterDirection() {}
 

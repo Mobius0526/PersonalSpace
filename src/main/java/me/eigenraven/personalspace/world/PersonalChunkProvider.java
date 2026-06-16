@@ -103,6 +103,7 @@ public class PersonalChunkProvider implements IChunkProvider {
             int periodZ = intervalZ + gapWidth;
             boolean isGapChunkX = gapWidth > 0 && intervalX > 0 && mod(chunkX, periodX) >= intervalX;
             boolean isGapChunkZ = gapWidth > 0 && intervalZ > 0 && mod(chunkZ, periodZ) >= intervalZ;
+            DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
 
             if (isGapChunkX || isGapChunkZ) {
                 for (int surfaceLevel : surfaceLevels) {
@@ -124,9 +125,9 @@ public class PersonalChunkProvider implements IChunkProvider {
 
             boolean isBoundaryX, prevBoundaryX, isBoundaryZ, prevBoundaryZ;
             if (gapWidth > 0) {
-                // isBoundaryX: draw at localX=0 → first area chunk after gap (mod == 0)
                 isBoundaryX = intervalX > 0 && mod(chunkX, periodX) == 0;
-                // prevBoundaryX: draw at localX=15 → last area chunk before gap (mod == interval-1)
+                // prevBoundaryX: draw at localX=15 → last area chunk before gap (mod ==
+                // interval-1)
                 prevBoundaryX = intervalX > 0 && mod(chunkX, periodX) == intervalX - 1;
                 isBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == 0;
                 prevBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == intervalZ - 1;
@@ -135,6 +136,43 @@ public class PersonalChunkProvider implements IChunkProvider {
                 isBoundaryZ = intervalZ > 0 && mod(chunkZ, intervalZ) == 0;
                 prevBoundaryX = intervalX > 0 && mod(chunkX + 1, intervalX) == 0;
                 prevBoundaryZ = intervalZ > 0 && mod(chunkZ + 1, intervalZ) == 0;
+            }
+
+            boolean isOrigin = dir == DimensionConfig.CenterDirection.ORIGIN;
+            boolean isAwayOrigin = dir == DimensionConfig.CenterDirection.AWAY_ORIGIN;
+
+            if (isOrigin) {
+                // X轴
+                if (chunkX >= 0) {
+                    isBoundaryX = false;
+                }
+                if (chunkX < 0) {
+                    prevBoundaryX = false;
+                }
+                // Z轴
+                if (chunkZ >= 0) {
+                    isBoundaryZ = false;
+                }
+                if (chunkZ < 0) {
+                    prevBoundaryZ = false;
+                }
+            }
+
+            if (isAwayOrigin) {
+                // X轴
+                if (chunkX >= 0) {
+                    prevBoundaryX = false;
+                }
+                if (chunkX < 0) {
+                    isBoundaryX = false;
+                }
+                // Z轴
+                if (chunkZ >= 0) {
+                    prevBoundaryZ = false;
+                }
+                if (chunkZ < 0) {
+                    isBoundaryZ = false;
+                }
             }
 
             Block boundaryBlockA = cfg.getBoundaryBlockAResolved();
@@ -242,11 +280,34 @@ public class PersonalChunkProvider implements IChunkProvider {
                 Block centerBlock = cfg.getCenterBlockResolved();
                 int centerMeta = cfg.getCenterMeta();
                 if (centerBlock != null && centerBlock != Blocks.air) {
-                    DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
-                    int dirOffX = (dir == DimensionConfig.CenterDirection.SW
-                            || dir == DimensionConfig.CenterDirection.NW) ? -1 : 0;
-                    int dirOffZ = (dir == DimensionConfig.CenterDirection.NE
-                            || dir == DimensionConfig.CenterDirection.NW) ? -1 : 0;
+                    int dirOffX = 0;
+                    int dirOffZ = 0;
+                    switch (dir) {
+                        case NE:
+                            dirOffX = 0;
+                            dirOffZ = -1;
+                            break;
+                        case NW:
+                            dirOffX = -1;
+                            dirOffZ = -1;
+                            break;
+                        case SE:
+                            dirOffX = 0;
+                            dirOffZ = 0;
+                            break;
+                        case SW:
+                            dirOffX = -1;
+                            dirOffZ = 0;
+                            break;
+                        case ORIGIN:
+                            dirOffX = chunkX >= 0 ? -1 : 1;
+                            dirOffZ = chunkZ >= 0 ? -1 : 1;
+                            break;
+                        case AWAY_ORIGIN:
+                            dirOffX = chunkX >= 0 ? 1 : -1;
+                            dirOffZ = chunkZ >= 0 ? 1 : -1;
+                            break;
+                    }
                     int centerLocalX = intervalX * 8 + dirOffX;
                     int centerLocalZ = intervalZ * 8 + dirOffZ;
 
