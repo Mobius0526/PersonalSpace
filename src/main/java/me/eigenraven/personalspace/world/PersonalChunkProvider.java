@@ -28,6 +28,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import me.eigenraven.personalspace.PersonalSpaceMod;
 import me.eigenraven.personalspace.config.Config;
+import me.eigenraven.personalspace.world.DimensionConfig.CenterDirection;
 
 public class PersonalChunkProvider implements IChunkProvider {
 
@@ -101,9 +102,15 @@ public class PersonalChunkProvider implements IChunkProvider {
             int gapWidth = MathHelper.clamp_int(cfg.getGapWidth(), 0, 5);
             int periodX = intervalX + gapWidth;
             int periodZ = intervalZ + gapWidth;
-            boolean isGapChunkX = gapWidth > 0 && intervalX > 0 && mod(chunkX, periodX) >= intervalX;
-            boolean isGapChunkZ = gapWidth > 0 && intervalZ > 0 && mod(chunkZ, periodZ) >= intervalZ;
             DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
+            boolean isGapChunkX = false;
+            boolean isGapChunkZ = false;
+            if (gapWidth > 0 && intervalX > 0) {
+                if (dir.equals(CenterDirection.ORIGIN) || dir.equals(CenterDirection.AWAY_ORIGIN)) {
+                    isGapChunkX = modByPoi(chunkX, periodX, dir) >= intervalX;
+                    isGapChunkZ = modByPoi(chunkZ, periodZ, dir) >= intervalZ;
+                }
+            }
 
             if (isGapChunkX || isGapChunkZ) {
                 for (int surfaceLevel : surfaceLevels) {
@@ -125,17 +132,15 @@ public class PersonalChunkProvider implements IChunkProvider {
 
             boolean isBoundaryX, prevBoundaryX, isBoundaryZ, prevBoundaryZ;
             if (gapWidth > 0) {
-                isBoundaryX = intervalX > 0 && mod(chunkX, periodX) == 0;
-                // prevBoundaryX: draw at localX=15 → last area chunk before gap (mod ==
-                // interval-1)
-                prevBoundaryX = intervalX > 0 && mod(chunkX, periodX) == intervalX - 1;
-                isBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == 0;
-                prevBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == intervalZ - 1;
+                isBoundaryX = intervalX > 0 && modByPoi(chunkX, periodX, dir) == 0;
+                prevBoundaryX = intervalX > 0 && modByPoi(chunkX, periodX, dir) == intervalX - 1;
+                isBoundaryZ = intervalZ > 0 && modByPoi(chunkZ, periodZ, dir) == 0;
+                prevBoundaryZ = intervalZ > 0 && modByPoi(chunkZ, periodZ, dir) == intervalZ - 1;
             } else {
-                isBoundaryX = intervalX > 0 && mod(chunkX, intervalX) == 0;
-                isBoundaryZ = intervalZ > 0 && mod(chunkZ, intervalZ) == 0;
-                prevBoundaryX = intervalX > 0 && mod(chunkX + 1, intervalX) == 0;
-                prevBoundaryZ = intervalZ > 0 && mod(chunkZ + 1, intervalZ) == 0;
+                isBoundaryX = intervalX > 0 && modByPoi(chunkX, intervalX, dir) == 0;
+                isBoundaryZ = intervalZ > 0 && modByPoi(chunkZ, intervalZ, dir) == 0;
+                prevBoundaryX = intervalX > 0 && modByPoi(chunkX + 1, intervalX, dir) == 0;
+                prevBoundaryZ = intervalZ > 0 && modByPoi(chunkZ + 1, intervalZ, dir) == 0;
             }
 
             boolean isOrigin = dir == DimensionConfig.CenterDirection.ORIGIN;
@@ -300,19 +305,19 @@ public class PersonalChunkProvider implements IChunkProvider {
                             dirOffZ = 0;
                             break;
                         case ORIGIN:
-                            dirOffX = chunkX >= 0 ? -1 : 1;
-                            dirOffZ = chunkZ >= 0 ? -1 : 1;
+                            dirOffX = chunkX >= 0 ? -1 : 0;
+                            dirOffZ = chunkZ >= 0 ? -1 : 0;
                             break;
                         case AWAY_ORIGIN:
-                            dirOffX = chunkX >= 0 ? 1 : -1;
-                            dirOffZ = chunkZ >= 0 ? 1 : -1;
+                            dirOffX = chunkX >= 0 ? 0 : -1;
+                            dirOffZ = chunkZ >= 0 ? 0 : -1;
                             break;
                     }
                     int centerLocalX = intervalX * 8 + dirOffX;
                     int centerLocalZ = intervalZ * 8 + dirOffZ;
 
-                    int modCX = mod(chunkX, periodX);
-                    int modCZ = mod(chunkZ, periodZ);
+                    int modCX = modByPoi(chunkX, periodX, dir);
+                    int modCZ = modByPoi(chunkZ, periodZ, dir);
 
                     if (modCX < intervalX && modCZ < intervalZ) {
                         int blockStartX = modCX * 16;
@@ -422,6 +427,16 @@ public class PersonalChunkProvider implements IChunkProvider {
         return m < 0 ? m + b : m;
     }
 
+    private int modByPoi(int a, int b, CenterDirection dir) {
+        if ((dir.equals(CenterDirection.ORIGIN) || dir.equals(CenterDirection.AWAY_ORIGIN)) && a < 0)
+            return mod(a - 1, b);
+        else return mod(a, b);
+    }
+
+    private boolean isobb(CenterDirection dir) {
+        return dir.equals(CenterDirection.ORIGIN) || dir.equals(CenterDirection.AWAY_ORIGIN);
+    }
+
     private void generateGapInChunk(Chunk chunk, int chunkX, int chunkZ, int surfaceLevel, DimensionConfig cfg,
             boolean isGapX, boolean isGapZ, int periodX, int periodZ, int gapWidth, int intervalX, int intervalZ) {
         int yChunk = surfaceLevel >> 4;
@@ -430,7 +445,7 @@ public class PersonalChunkProvider implements IChunkProvider {
             ebs = new ExtendedBlockStorage(surfaceLevel & ~15, true);
             chunk.getBlockStorageArray()[yChunk] = ebs;
         }
-
+        CenterDirection dir = cfg.getCenterDirection();
         DimensionConfig.GapPreset preset = cfg.getGapPreset();
         Block gapBlockA = cfg.getGapBlockAResolved();
         int gapMetaA = cfg.getGapMetaA();
@@ -458,9 +473,9 @@ public class PersonalChunkProvider implements IChunkProvider {
                     if (isIntersection) {
                         // At intersection: draw corner blocks where both edges meet
                         if (hasStripe) {
-                            int gapOffsetX = mod(chunkX, periodX) - intervalX;
+                            int gapOffsetX = modByPoi(chunkX, periodX, dir) - intervalX;
                             int offsetX = gapOffsetX * 16 + localX;
-                            int gapOffsetZ = mod(chunkZ, periodZ) - intervalZ;
+                            int gapOffsetZ = modByPoi(chunkZ, periodZ, dir) - intervalZ;
                             int offsetZ = gapOffsetZ * 16 + localZ;
                             boolean onEdgeX = offsetX == 0 || offsetX == gapWidthBlocks - 1;
                             boolean onEdgeZ = offsetZ == 0 || offsetZ == gapWidthBlocks - 1;
@@ -471,7 +486,7 @@ public class PersonalChunkProvider implements IChunkProvider {
                         }
                     } else {
                         if (isGapX && periodX > 0) {
-                            int gapChunkOffset = mod(chunkX, periodX) - intervalX;
+                            int gapChunkOffset = modByPoi(chunkX, periodX, dir) - intervalX;
                             int offsetInGap = gapChunkOffset * 16 + localX;
                             StripeBlock road = getRoadBlock(
                                     offsetInGap,
@@ -486,7 +501,7 @@ public class PersonalChunkProvider implements IChunkProvider {
                             block = road.block;
                             meta = road.meta;
                         } else if (isGapZ && periodZ > 0) {
-                            int gapChunkOffset = mod(chunkZ, periodZ) - intervalZ;
+                            int gapChunkOffset = modByPoi(chunkZ, periodZ, dir) - intervalZ;
                             int offsetInGap = gapChunkOffset * 16 + localZ;
                             StripeBlock road = getRoadBlock(
                                     offsetInGap,
