@@ -208,6 +208,26 @@ public class PortalTileEntity extends TileEntity {
             otherX = targetPosX;
             otherY = targetPosY;
             otherZ = targetPosZ;
+            DimensionConfig cfg = DimensionConfig.getForDimension(this.targetDimId, false);
+            if (cfg.isObbModeEnable()) {
+                switch (cfg.getCenterDirection()) {
+                    case SE:
+                    case AWAY_ORIGIN:
+                        break;
+                    case SW:
+                        otherX--;
+                        break;
+                    case NE:
+                        otherZ--;
+                        break;
+                    case NW:
+                    case ORIGIN:
+                        otherX--;
+                        otherZ--;
+                        break;
+                }
+            }
+
             otherWorld.setBlock(otherX, otherY, otherZ, PersonalSpaceMod.BLOCK_PORTAL, facing.ordinal(), 3);
             otherPortal = (PortalTileEntity) otherWorld.getTileEntity(otherX, otherY, otherZ);
         }

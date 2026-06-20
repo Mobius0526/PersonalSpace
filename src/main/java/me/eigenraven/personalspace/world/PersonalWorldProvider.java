@@ -91,7 +91,27 @@ public class PersonalWorldProvider extends WorldProvider {
 
     @Override
     public ChunkCoordinates getSpawnPoint() {
-        return new ChunkCoordinates(8, getConfig().getGroundLevel() + 2, 8);
+        int x = 8;
+        int z = 8;
+        if (config.isObbModeEnable()) {
+            switch (config.getCenterDirection()) {
+                case SE:
+                case AWAY_ORIGIN:
+                    break;
+                case SW:
+                    x--;
+                    break;
+                case NE:
+                    z--;
+                    break;
+                case NW:
+                case ORIGIN:
+                    x--;
+                    z--;
+                    break;
+            }
+        }
+        return new ChunkCoordinates(x, getConfig().getGroundLevel() + 2, z);
     }
 
     @Override
@@ -240,7 +260,27 @@ public class PersonalWorldProvider extends WorldProvider {
 
     @Override
     public ChunkCoordinates getEntrancePortalLocation() {
-        return new ChunkCoordinates(8, getAverageGroundLevel(), 8);
+        int x = 8;
+        int z = 8;
+        if (config.isObbModeEnable()) {
+            switch (config.getCenterDirection()) {
+                case SE:
+                case AWAY_ORIGIN:
+                    break;
+                case SW:
+                    x--;
+                    break;
+                case NE:
+                    z--;
+                    break;
+                case NW:
+                case ORIGIN:
+                    x--;
+                    z--;
+                    break;
+            }
+        }
+        return new ChunkCoordinates(x, getAverageGroundLevel(), z);
     }
 
     private void updateSkyType() {

@@ -90,6 +90,8 @@ public class PersonalChunkProvider implements IChunkProvider {
         }
 
         DimensionConfig cfg = world.getConfig();
+        Boolean isObbMode = cfg.isObbModeEnable();
+        DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
 
         int groundLevel = cfg.getGroundLevel() - 1;
         if (groundLevel >= 0 && groundLevel < worldHeight) {
@@ -102,13 +104,15 @@ public class PersonalChunkProvider implements IChunkProvider {
             int gapWidth = MathHelper.clamp_int(cfg.getGapWidth(), 0, 5);
             int periodX = intervalX + gapWidth;
             int periodZ = intervalZ + gapWidth;
-            DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
             boolean isGapChunkX = false;
             boolean isGapChunkZ = false;
             if (gapWidth > 0 && intervalX > 0) {
                 if (dir.equals(CenterDirection.ORIGIN) || dir.equals(CenterDirection.AWAY_ORIGIN)) {
                     isGapChunkX = modByPoi(chunkX, periodX, dir) >= intervalX;
                     isGapChunkZ = modByPoi(chunkZ, periodZ, dir) >= intervalZ;
+                } else {
+                    isGapChunkX = mod(chunkX, periodX) >= intervalX;
+                    isGapChunkZ = mod(chunkZ, periodZ) >= intervalZ;
                 }
             }
 
@@ -142,41 +146,52 @@ public class PersonalChunkProvider implements IChunkProvider {
                 prevBoundaryX = intervalX > 0 && modByPoi(chunkX + 1, intervalX, dir) == 0;
                 prevBoundaryZ = intervalZ > 0 && modByPoi(chunkZ + 1, intervalZ, dir) == 0;
             }
+            if (isObbMode) {
+                switch (dir) {
+                    case SE:
+                        prevBoundaryX = false;
+                        prevBoundaryZ = false;
+                        break;
+                    case SW:
+                        isBoundaryX = false;
+                        prevBoundaryZ = false;
+                        break;
+                    case NE:
+                        prevBoundaryX = false;
+                        isBoundaryZ = false;
+                        break;
+                    case NW:
+                        isBoundaryX = false;
+                        isBoundaryZ = false;
+                        break;
+                    case ORIGIN:
+                        if (chunkX >= 0) {
+                            isBoundaryX = false;
+                        }
+                        if (chunkX < 0) {
+                            prevBoundaryX = false;
+                        }
+                        if (chunkZ >= 0) {
+                            isBoundaryZ = false;
+                        }
+                        if (chunkZ < 0) {
+                            prevBoundaryZ = false;
+                        }
 
-            boolean isOrigin = dir == DimensionConfig.CenterDirection.ORIGIN;
-            boolean isAwayOrigin = dir == DimensionConfig.CenterDirection.AWAY_ORIGIN;
-
-            if (isOrigin) {
-                // X轴
-                if (chunkX >= 0) {
-                    isBoundaryX = false;
-                }
-                if (chunkX < 0) {
-                    prevBoundaryX = false;
-                }
-                // Z轴
-                if (chunkZ >= 0) {
-                    isBoundaryZ = false;
-                }
-                if (chunkZ < 0) {
-                    prevBoundaryZ = false;
-                }
-            }
-
-            if (isAwayOrigin) {
-                // X轴
-                if (chunkX >= 0) {
-                    prevBoundaryX = false;
-                }
-                if (chunkX < 0) {
-                    isBoundaryX = false;
-                }
-                // Z轴
-                if (chunkZ >= 0) {
-                    prevBoundaryZ = false;
-                }
-                if (chunkZ < 0) {
-                    isBoundaryZ = false;
+                        break;
+                    case AWAY_ORIGIN:
+                        if (chunkX >= 0) {
+                            prevBoundaryX = false;
+                        }
+                        if (chunkX < 0) {
+                            isBoundaryX = false;
+                        }
+                        if (chunkZ >= 0) {
+                            prevBoundaryZ = false;
+                        }
+                        if (chunkZ < 0) {
+                            isBoundaryZ = false;
+                        }
                 }
             }
 
@@ -352,8 +367,35 @@ public class PersonalChunkProvider implements IChunkProvider {
                 ebs = new ExtendedBlockStorage(platformLevel & ~15, true);
                 chunk.getBlockStorageArray()[yChunk] = ebs;
             }
-            for (int z = 4; z < 13; z++) {
-                for (int x = 4; x < 13; x++) {
+            int xStart = 4;
+            int xEnd = 12;
+            int zStart = 4;
+            int zEnd = 12;
+
+            if (isObbMode) {
+                switch (dir) {
+                    case SE:
+                    case AWAY_ORIGIN:
+                        break;
+                    case SW:
+                        xStart--;
+                        xEnd--;
+                        break;
+                    case NE:
+                        zStart--;
+                        zEnd--;
+                        break;
+                    case NW:
+                    case ORIGIN:
+                        xStart--;
+                        xEnd--;
+                        zStart--;
+                        zEnd--;
+                        break;
+                }
+            }
+            for (int z = zStart; z <= zEnd; z++) {
+                for (int x = xStart; x <= xEnd; x++) {
                     ebs.func_150818_a(x, platformLevel & 15, z, Blocks.double_stone_slab);
                 }
             }
@@ -433,10 +475,6 @@ public class PersonalChunkProvider implements IChunkProvider {
         else return mod(a, b);
     }
 
-    private boolean isobb(CenterDirection dir) {
-        return dir.equals(CenterDirection.ORIGIN) || dir.equals(CenterDirection.AWAY_ORIGIN);
-    }
-
     private void generateGapInChunk(Chunk chunk, int chunkX, int chunkZ, int surfaceLevel, DimensionConfig cfg,
             boolean isGapX, boolean isGapZ, int periodX, int periodZ, int gapWidth, int intervalX, int intervalZ) {
         int yChunk = surfaceLevel >> 4;
@@ -445,7 +483,7 @@ public class PersonalChunkProvider implements IChunkProvider {
             ebs = new ExtendedBlockStorage(surfaceLevel & ~15, true);
             chunk.getBlockStorageArray()[yChunk] = ebs;
         }
-        CenterDirection dir = cfg.getCenterDirection();
+
         DimensionConfig.GapPreset preset = cfg.getGapPreset();
         Block gapBlockA = cfg.getGapBlockAResolved();
         int gapMetaA = cfg.getGapMetaA();
@@ -473,9 +511,9 @@ public class PersonalChunkProvider implements IChunkProvider {
                     if (isIntersection) {
                         // At intersection: draw corner blocks where both edges meet
                         if (hasStripe) {
-                            int gapOffsetX = modByPoi(chunkX, periodX, dir) - intervalX;
+                            int gapOffsetX = mod(chunkX, periodX) - intervalX;
                             int offsetX = gapOffsetX * 16 + localX;
-                            int gapOffsetZ = modByPoi(chunkZ, periodZ, dir) - intervalZ;
+                            int gapOffsetZ = mod(chunkZ, periodZ) - intervalZ;
                             int offsetZ = gapOffsetZ * 16 + localZ;
                             boolean onEdgeX = offsetX == 0 || offsetX == gapWidthBlocks - 1;
                             boolean onEdgeZ = offsetZ == 0 || offsetZ == gapWidthBlocks - 1;
@@ -486,7 +524,7 @@ public class PersonalChunkProvider implements IChunkProvider {
                         }
                     } else {
                         if (isGapX && periodX > 0) {
-                            int gapChunkOffset = modByPoi(chunkX, periodX, dir) - intervalX;
+                            int gapChunkOffset = mod(chunkX, periodX) - intervalX;
                             int offsetInGap = gapChunkOffset * 16 + localX;
                             StripeBlock road = getRoadBlock(
                                     offsetInGap,
@@ -501,7 +539,7 @@ public class PersonalChunkProvider implements IChunkProvider {
                             block = road.block;
                             meta = road.meta;
                         } else if (isGapZ && periodZ > 0) {
-                            int gapChunkOffset = modByPoi(chunkZ, periodZ, dir) - intervalZ;
+                            int gapChunkOffset = mod(chunkZ, periodZ) - intervalZ;
                             int offsetInGap = gapChunkOffset * 16 + localZ;
                             StripeBlock road = getRoadBlock(
                                     offsetInGap,
