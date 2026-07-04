@@ -98,6 +98,7 @@ public class WPreviewPanel extends Widget {
                 config.getCenterDirection(),
                 config.getCenterBlock(),
                 config.getCenterMeta(),
+                config.isObbModeEnable(),
                 config.getLayersAsString());
     }
 
@@ -169,8 +170,13 @@ public class WPreviewPanel extends Widget {
         int localX = worldX & 15;
         int localZ = worldZ & 15;
 
-        boolean isGapChunkX = gapWidth > 0 && intervalX > 0 && periodX > 0 && mod(chunkX, periodX) >= intervalX;
-        boolean isGapChunkZ = gapWidth > 0 && intervalZ > 0 && periodZ > 0 && mod(chunkZ, periodZ) >= intervalZ;
+        DimensionConfig.CenterDirection dir = config.getCenterDirection();
+        boolean isObbMode = config.isObbModeEnable();
+
+        boolean isGapChunkX = gapWidth > 0 && intervalX > 0 && periodX > 0
+                && modByPoi(chunkX, periodX, dir) >= intervalX;
+        boolean isGapChunkZ = gapWidth > 0 && intervalZ > 0 && periodZ > 0
+                && modByPoi(chunkZ, periodZ, dir) >= intervalZ;
 
         // Gap
         if (isGapChunkX || isGapChunkZ) {
@@ -188,6 +194,8 @@ public class WPreviewPanel extends Widget {
                     gapWidth,
                     intervalX,
                     intervalZ,
+                    bAColor,
+                    bBColor,
                     gapAColor,
                     gapBColor,
                     gapCColor);
@@ -196,15 +204,64 @@ public class WPreviewPanel extends Widget {
         // Boundary
         boolean isBoundaryX, prevBoundaryX, isBoundaryZ, prevBoundaryZ;
         if (gapWidth > 0) {
-            isBoundaryX = intervalX > 0 && periodX > 0 && mod(chunkX, periodX) == 0;
-            prevBoundaryX = intervalX > 0 && periodX > 0 && mod(chunkX, periodX) == intervalX - 1;
-            isBoundaryZ = intervalZ > 0 && periodZ > 0 && mod(chunkZ, periodZ) == 0;
-            prevBoundaryZ = intervalZ > 0 && periodZ > 0 && mod(chunkZ, periodZ) == intervalZ - 1;
+            isBoundaryX = intervalX > 0 && periodX > 0 && modByPoi(chunkX, periodX, dir) == 0;
+            prevBoundaryX = intervalX > 0 && periodX > 0 && modByPoi(chunkX, periodX, dir) == intervalX - 1;
+            isBoundaryZ = intervalZ > 0 && periodZ > 0 && modByPoi(chunkZ, periodZ, dir) == 0;
+            prevBoundaryZ = intervalZ > 0 && periodZ > 0 && modByPoi(chunkZ, periodZ, dir) == intervalZ - 1;
         } else {
-            isBoundaryX = intervalX > 0 && mod(chunkX, intervalX) == 0;
-            isBoundaryZ = intervalZ > 0 && mod(chunkZ, intervalZ) == 0;
-            prevBoundaryX = intervalX > 0 && mod(chunkX + 1, intervalX) == 0;
-            prevBoundaryZ = intervalZ > 0 && mod(chunkZ + 1, intervalZ) == 0;
+            isBoundaryX = intervalX > 0 && modByPoi(chunkX, intervalX, dir) == 0;
+            isBoundaryZ = intervalZ > 0 && modByPoi(chunkZ, intervalZ, dir) == 0;
+            prevBoundaryX = intervalX > 0 && modByPoi(chunkX + 1, intervalX, dir) == 0;
+            prevBoundaryZ = intervalZ > 0 && modByPoi(chunkZ + 1, intervalZ, dir) == 0;
+        }
+
+        if (isObbMode) {
+            switch (dir) {
+                case SE:
+                    prevBoundaryX = false;
+                    prevBoundaryZ = false;
+                    break;
+                case SW:
+                    isBoundaryX = false;
+                    prevBoundaryZ = false;
+                    break;
+                case NE:
+                    prevBoundaryX = false;
+                    isBoundaryZ = false;
+                    break;
+                case NW:
+                    isBoundaryX = false;
+                    isBoundaryZ = false;
+                    break;
+                case ORIGIN:
+                    if (chunkX >= 0) {
+                        isBoundaryX = false;
+                    }
+                    if (chunkX < 0) {
+                        prevBoundaryX = false;
+                    }
+                    if (chunkZ >= 0) {
+                        isBoundaryZ = false;
+                    }
+                    if (chunkZ < 0) {
+                        prevBoundaryZ = false;
+                    }
+                    break;
+                case AWAY_ORIGIN:
+                    if (chunkX >= 0) {
+                        prevBoundaryX = false;
+                    }
+                    if (chunkX < 0) {
+                        isBoundaryX = false;
+                    }
+                    if (chunkZ >= 0) {
+                        prevBoundaryZ = false;
+                    }
+                    if (chunkZ < 0) {
+                        isBoundaryZ = false;
+                    }
+                    break;
+            }
         }
 
         if ((isBoundaryX && localX == 0) || (prevBoundaryX && localX == 15)
@@ -220,16 +277,13 @@ public class WPreviewPanel extends Widget {
 
         // Center
         if (config.isCenterEnabled() && intervalX > 0 && intervalZ > 0 && periodX > 0 && periodZ > 0) {
-            DimensionConfig.CenterDirection dir = config.getCenterDirection();
-            int dirOffX = (dir == DimensionConfig.CenterDirection.SW || dir == DimensionConfig.CenterDirection.NW) ? -1
-                    : 0;
-            int dirOffZ = (dir == DimensionConfig.CenterDirection.NE || dir == DimensionConfig.CenterDirection.NW) ? -1
-                    : 0;
+            int dirOffX = getCenterOffset(chunkX, dir, true);
+            int dirOffZ = getCenterOffset(chunkZ, dir, false);
             int centerLocalX = intervalX * 8 + dirOffX;
             int centerLocalZ = intervalZ * 8 + dirOffZ;
 
-            int modCX = mod(chunkX, periodX);
-            int modCZ = mod(chunkZ, periodZ);
+            int modCX = modByPoi(chunkX, periodX, dir);
+            int modCZ = modByPoi(chunkZ, periodZ, dir);
 
             if (modCX < intervalX && modCZ < intervalZ) {
                 int areaBlockX = modCX * 16 + localX;
@@ -247,36 +301,49 @@ public class WPreviewPanel extends Widget {
     }
 
     private int computeGapColor(int chunkX, int chunkZ, int localX, int localZ, int worldX, int worldZ, boolean isGapX,
-            boolean isGapZ, int periodX, int periodZ, int gapWidth, int intervalX, int intervalZ, int gapAColor,
-            int gapBColor, int gapCColor) {
+            boolean isGapZ, int periodX, int periodZ, int gapWidth, int intervalX, int intervalZ, int bAColor,
+            int bBColor, int gapAColor, int gapBColor, int gapCColor) {
         DimensionConfig.GapPreset preset = config.getGapPreset();
         int gapWidthBlocks = gapWidth * 16;
+        int roadWidthBlocks = config.isObbModeEnable() ? gapWidthBlocks - 1 : gapWidthBlocks;
+        DimensionConfig.CenterDirection dir = config.getCenterDirection();
+        int obbBoundaryOffsetX = config.isObbModeEnable() ? getObbRoadBoundaryOffset(gapWidthBlocks, chunkX, dir, true)
+                : -1;
+        int obbBoundaryOffsetZ = config.isObbModeEnable() ? getObbRoadBoundaryOffset(gapWidthBlocks, chunkZ, dir, false)
+                : -1;
 
         if (preset == DimensionConfig.GapPreset.ROAD) {
             boolean isIntersection = isGapX && isGapZ;
             boolean hasStripe = gapBColor != 0;
+            int offsetX = isGapX ? getGapOffsetInBlocks(chunkX, localX, periodX, intervalX, dir) : -1;
+            int offsetZ = isGapZ ? getGapOffsetInBlocks(chunkZ, localZ, periodZ, intervalZ, dir) : -1;
 
-            if (isIntersection) {
+            boolean onObbBoundaryX = isGapX && offsetX == obbBoundaryOffsetX;
+            boolean onObbBoundaryZ = isGapZ && offsetZ == obbBoundaryOffsetZ;
+
+            if (!isIntersection && (onObbBoundaryX || onObbBoundaryZ)) {
+                return getBoundaryColor(worldX, worldZ, bAColor, bBColor, gapAColor);
+            } else if (isIntersection) {
+                int logicalOffsetX = getLogicalRoadOffset(offsetX, obbBoundaryOffsetX);
+                int logicalOffsetZ = getLogicalRoadOffset(offsetZ, obbBoundaryOffsetZ);
+                boolean onEdgeX = isRoadEdge(logicalOffsetX, roadWidthBlocks);
+                boolean onEdgeZ = isRoadEdge(logicalOffsetZ, roadWidthBlocks);
+
+                if (onObbBoundaryX && onObbBoundaryZ) {
+                    return getBoundaryColor(worldX, worldZ, bAColor, bBColor, gapAColor);
+                }
                 if (hasStripe) {
-                    int gapOffsetX = mod(chunkX, periodX) - intervalX;
-                    int offsetX = gapOffsetX * 16 + localX;
-                    int gapOffsetZ = mod(chunkZ, periodZ) - intervalZ;
-                    int offsetZ = gapOffsetZ * 16 + localZ;
-                    boolean onEdgeX = offsetX == 0 || offsetX == gapWidthBlocks - 1;
-                    boolean onEdgeZ = offsetZ == 0 || offsetZ == gapWidthBlocks - 1;
-                    if (onEdgeX && onEdgeZ) {
+                    if ((onEdgeX || onObbBoundaryX) && (onEdgeZ || onObbBoundaryZ)) {
                         return gapBColor;
                     }
                 }
             } else {
                 if (isGapX && periodX > 0) {
-                    int gapChunkOffset = mod(chunkX, periodX) - intervalX;
-                    int offsetInGap = gapChunkOffset * 16 + localX;
-                    return computeRoadColor(offsetInGap, worldZ, gapWidthBlocks, gapAColor, gapBColor, gapCColor);
+                    int offsetInGap = getLogicalRoadOffset(offsetX, obbBoundaryOffsetX);
+                    return computeRoadColor(offsetInGap, worldZ, roadWidthBlocks, gapAColor, gapBColor, gapCColor);
                 } else if (isGapZ && periodZ > 0) {
-                    int gapChunkOffset = mod(chunkZ, periodZ) - intervalZ;
-                    int offsetInGap = gapChunkOffset * 16 + localZ;
-                    return computeRoadColor(offsetInGap, worldX, gapWidthBlocks, gapAColor, gapBColor, gapCColor);
+                    int offsetInGap = getLogicalRoadOffset(offsetZ, obbBoundaryOffsetZ);
+                    return computeRoadColor(offsetInGap, worldX, roadWidthBlocks, gapAColor, gapBColor, gapCColor);
                 }
             }
         }
@@ -290,17 +357,95 @@ public class WPreviewPanel extends Widget {
         boolean hasDash = gapCColor != 0;
 
         // Edge lines (B block)
-        if (hasStripe && (offsetInGap == 0 || offsetInGap == gapWidthBlocks - 1)) {
+        if (hasStripe && isRoadEdge(offsetInGap, gapWidthBlocks)) {
             return gapBColor;
         }
         // Center dashed line (C block)
         if (hasDash && gapWidthBlocks >= 4) {
             int center = gapWidthBlocks / 2;
-            if ((offsetInGap == center || offsetInGap == center - 1) && mod(alongRoad + 2, 8) < 4) {
+            boolean onCenter = (gapWidthBlocks & 1) == 0 ? offsetInGap == center || offsetInGap == center - 1
+                    : offsetInGap == center;
+            if (onCenter && mod(alongRoad + 2, 8) < 4) {
                 return gapCColor;
             }
         }
         return gapAColor;
+    }
+
+    private int getBoundaryColor(int worldX, int worldZ, int boundaryAColor, int boundaryBColor, int fallbackColor) {
+        boolean useA = ((worldX + worldZ) & 1) == 0;
+        if (useA) {
+            return boundaryAColor != 0 ? boundaryAColor : (boundaryBColor != 0 ? boundaryBColor : fallbackColor);
+        }
+        return boundaryBColor != 0 ? boundaryBColor : (boundaryAColor != 0 ? boundaryAColor : fallbackColor);
+    }
+
+    private int modByPoi(int a, int b, DimensionConfig.CenterDirection dir) {
+        if ((dir.equals(DimensionConfig.CenterDirection.ORIGIN) || dir.equals(DimensionConfig.CenterDirection.AWAY_ORIGIN))
+                && a < 0) return mod(a - 1, b);
+        return mod(a, b);
+    }
+
+    private int getGapOffsetInBlocks(int chunkCoord, int localCoord, int period, int interval,
+            DimensionConfig.CenterDirection dir) {
+        return (modByPoi(chunkCoord, period, dir) - interval) * 16 + localCoord;
+    }
+
+    private int getObbRoadBoundaryOffset(int widthBlocks, int chunkCoord, DimensionConfig.CenterDirection dir,
+            boolean xAxis) {
+        boolean useUpperCenter;
+
+        switch (dir) {
+            case SW:
+                useUpperCenter = !xAxis;
+                break;
+            case NE:
+                useUpperCenter = xAxis;
+                break;
+            case NW:
+                useUpperCenter = false;
+                break;
+            case ORIGIN:
+                useUpperCenter = chunkCoord < 0;
+                break;
+            case AWAY_ORIGIN:
+                useUpperCenter = chunkCoord >= 0;
+                break;
+            case SE:
+            default:
+                useUpperCenter = true;
+                break;
+        }
+
+        return useUpperCenter ? 0 : widthBlocks - 1;
+    }
+
+    private int getLogicalRoadOffset(int offsetInGap, int obbBoundaryOffset) {
+        if (obbBoundaryOffset < 0) return offsetInGap;
+        if (offsetInGap == obbBoundaryOffset) return -1;
+        return offsetInGap > obbBoundaryOffset ? offsetInGap - 1 : offsetInGap;
+    }
+
+    private boolean isRoadEdge(int logicalOffset, int roadWidthBlocks) {
+        return logicalOffset == 0 || logicalOffset == roadWidthBlocks - 1;
+    }
+
+    private int getCenterOffset(int chunkCoord, DimensionConfig.CenterDirection dir, boolean xAxis) {
+        switch (dir) {
+            case SW:
+                return xAxis ? -1 : 0;
+            case NE:
+                return xAxis ? 0 : -1;
+            case NW:
+                return -1;
+            case ORIGIN:
+                return chunkCoord >= 0 ? -1 : 0;
+            case AWAY_ORIGIN:
+                return chunkCoord >= 0 ? 0 : -1;
+            case SE:
+            default:
+                return 0;
+        }
     }
 
     private int getTopLayerColor() {

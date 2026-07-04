@@ -67,6 +67,7 @@ gui.personalWorld.gap.blockNotAllowed.a=Gap A block not allowed
 gui.personalWorld.gap.blockNotAllowed.b=Gap B block not allowed
 gui.personalWorld.gap.blockNotAllowed.c=Gap C block not allowed
 
+gui.personalWorld.obbMode=Odd chunk size
 gui.personalWorld.center.enable=Center Marker
 gui.personalWorld.center.block=Center Block
 gui.personalWorld.center.block.short=C
@@ -75,6 +76,8 @@ gui.personalWorld.center.dir.SE=SE (X+ Z+)
 gui.personalWorld.center.dir.SW=SW (X- Z+)
 gui.personalWorld.center.dir.NE=NE (X+ Z-)
 gui.personalWorld.center.dir.NW=NW (X- Z-)
+gui.personalWorld.center.dir.ORIGIN=Toward origin
+gui.personalWorld.center.dir.AWAY_ORIGIN=Away from origin
 
 gui.personalWorld.button.plus=+
 gui.personalWorld.button.minus=-

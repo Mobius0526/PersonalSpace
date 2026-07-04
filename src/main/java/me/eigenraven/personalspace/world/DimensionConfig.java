@@ -155,7 +155,9 @@ public class DimensionConfig {
         SE, // x+ z+ (default)
         SW, // x- z+
         NE, // x+ z-
-        NW; // x- z-
+        NW, // x- z-
+        ORIGIN,
+        AWAY_ORIGIN;
 
         CenterDirection() {}
 
@@ -202,6 +204,8 @@ public class DimensionConfig {
     private boolean applyToAllSurfaceLayers = false;
 
     private boolean centerEnabled = false;
+    private boolean obbModeEnable = true;
+
     private CenterDirection centerDirection = CenterDirection.SE;
     private String centerBlock = "minecraft:wool";
     private int centerMeta = 14;
@@ -444,7 +448,13 @@ public class DimensionConfig {
         if (write && cfg.hasKey(GAP, "onExposedSurfaces")) {
             cfg.getCategory(GAP).remove("onExposedSurfaces");
         }
-
+        final String OBB_MODE = "obb_mode";
+        cur = cfg.get(OBB_MODE, "enabled", isObbModeEnable(), "");
+        if (write) {
+            cur.set(isObbModeEnable());
+        } else {
+            setObbModeEnable(cur.getBoolean());
+        }
         final String CENTER = "center";
 
         cur = cfg.get(CENTER, "enabled", isCenterEnabled(), "");
@@ -580,6 +590,8 @@ public class DimensionConfig {
             this.setCenterDirection(source.getCenterDirection());
             this.setCenterBlock(source.getCenterBlock());
             this.setCenterMeta(source.getCenterMeta());
+
+            this.setObbModeEnable(source.isObbModeEnable());
 
             this.needsSaving = true;
         }
@@ -1454,6 +1466,17 @@ public class DimensionConfig {
         if (this.centerEnabled != centerEnabled) {
             this.needsSaving = true;
             this.centerEnabled = centerEnabled;
+        }
+    }
+
+    public boolean isObbModeEnable() {
+        return obbModeEnable;
+    }
+
+    public void setObbModeEnable(boolean obbModeEnable) {
+        if (this.obbModeEnable != obbModeEnable) {
+            this.needsSaving = true;
+            this.obbModeEnable = obbModeEnable;
         }
     }
 

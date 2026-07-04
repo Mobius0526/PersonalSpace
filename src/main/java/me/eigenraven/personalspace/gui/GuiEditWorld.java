@@ -79,6 +79,7 @@ public class GuiEditWorld extends GuiScreen {
     public WBlockDropdown gapBlockCDropdown;
     public WToggleButton applyToAllSurfaceLayersToggle;
 
+    public WToggleButton obbModeToggle;
     public WToggleButton centerEnabledToggle;
     public WButton centerDirectionButton;
     public WBlockDropdown centerBlockDropdown;
@@ -328,11 +329,13 @@ public class GuiEditWorld extends GuiScreen {
 
         boolean centerVisible = desiredConfig.isCenterEnabled();
 
+        if (obbModeToggle != null) {
+            obbModeToggle.setValue(desiredConfig.isObbModeEnable());
+        }
         if (centerEnabledToggle != null) {
             centerEnabledToggle.setValue(centerVisible);
         }
         if (centerDirectionButton != null) {
-            centerDirectionButton.visible = centerVisible;
             centerDirectionButton.text = getCenterDirectionText();
         }
         if (centerBlockDropdown != null) {
@@ -1060,7 +1063,36 @@ public class GuiEditWorld extends GuiScreen {
 
         updateGapButtons();
 
-        // Center marker section
+        // Center layout section
+        this.obbModeToggle = new WToggleButton(
+                new Rectangle(0, this.ySize, 18, 18),
+                "",
+                false,
+                0,
+                desiredConfig.isObbModeEnable(),
+                () -> {
+                    desiredConfig.setObbModeEnable(obbModeToggle.getValue());
+                    updateCenterButtons();
+                    configToPreset();
+                });
+        this.obbModeToggle.addChild(new WLabel(24, 4, I18n.format("gui.personalWorld.obbMode"), false));
+        addWidget(this.obbModeToggle);
+
+        this.centerDirectionButton = new WButton(
+                new Rectangle(0, this.ySize, 122, 18),
+                getCenterDirectionText(),
+                true,
+                WButton.DEFAULT_COLOR,
+                null,
+                () -> {
+                    int next = (desiredConfig.getCenterDirection().ordinal() + 1)
+                            % DimensionConfig.CenterDirection.values().length;
+                    desiredConfig.setCenterDirection(DimensionConfig.CenterDirection.fromOrdinal(next));
+                    updateCenterButtons();
+                    configToPreset();
+                });
+        addWidget(this.centerDirectionButton);
+
         this.centerEnabledToggle = new WToggleButton(
                 new Rectangle(0, this.ySize, 18, 18),
                 "",
@@ -1092,21 +1124,6 @@ public class GuiEditWorld extends GuiScreen {
         this.centerBlockDropdown.setLabel(I18n.format("gui.personalWorld.center.block.short"));
         this.centerBlockDropdown.setGuiRelativePos(0, this.ySize);
         addWidget(this.centerBlockDropdown);
-
-        this.centerDirectionButton = new WButton(
-                new Rectangle(42, this.centerBlockDropdown.position.y, 80, 18),
-                getCenterDirectionText(),
-                true,
-                WButton.DEFAULT_COLOR,
-                null,
-                () -> {
-                    int next = (desiredConfig.getCenterDirection().ordinal() + 1)
-                            % DimensionConfig.CenterDirection.values().length;
-                    desiredConfig.setCenterDirection(DimensionConfig.CenterDirection.fromOrdinal(next));
-                    updateCenterButtons();
-                    configToPreset();
-                });
-        rootWidget.addChild(this.centerDirectionButton);
 
         this.ySize += 2;
         updateCenterButtons();
@@ -1357,9 +1374,10 @@ public class GuiEditWorld extends GuiScreen {
         this.applyToAllSurfaceLayersToggle.enabled = generationEnabled;
 
         boolean centerCanEnable = generationEnabled && !boundaryIsZero;
+        this.obbModeToggle.enabled = generationEnabled;
+        this.centerDirectionButton.enabled = generationEnabled;
         this.centerEnabledToggle.enabled = centerCanEnable;
         boolean centerActive = centerCanEnable && desiredConfig.isCenterEnabled();
-        this.centerDirectionButton.enabled = centerActive;
         this.centerBlockDropdown.enabled = centerActive;
 
         String actualText = this.presetEntry.textField.getText();

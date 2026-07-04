@@ -28,6 +28,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import me.eigenraven.personalspace.PersonalSpaceMod;
 import me.eigenraven.personalspace.config.Config;
+import me.eigenraven.personalspace.world.DimensionConfig.CenterDirection;
 
 public class PersonalChunkProvider implements IChunkProvider {
 
@@ -89,6 +90,8 @@ public class PersonalChunkProvider implements IChunkProvider {
         }
 
         DimensionConfig cfg = world.getConfig();
+        boolean isObbMode = cfg.isObbModeEnable();
+        DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
 
         int groundLevel = cfg.getGroundLevel() - 1;
         if (groundLevel >= 0 && groundLevel < worldHeight) {
@@ -101,8 +104,12 @@ public class PersonalChunkProvider implements IChunkProvider {
             int gapWidth = MathHelper.clamp_int(cfg.getGapWidth(), 0, 5);
             int periodX = intervalX + gapWidth;
             int periodZ = intervalZ + gapWidth;
-            boolean isGapChunkX = gapWidth > 0 && intervalX > 0 && mod(chunkX, periodX) >= intervalX;
-            boolean isGapChunkZ = gapWidth > 0 && intervalZ > 0 && mod(chunkZ, periodZ) >= intervalZ;
+            boolean isGapChunkX = false;
+            boolean isGapChunkZ = false;
+            if (gapWidth > 0) {
+                isGapChunkX = intervalX > 0 && periodX > 0 && modByPoi(chunkX, periodX, dir) >= intervalX;
+                isGapChunkZ = intervalZ > 0 && periodZ > 0 && modByPoi(chunkZ, periodZ, dir) >= intervalZ;
+            }
 
             if (isGapChunkX || isGapChunkZ) {
                 for (int surfaceLevel : surfaceLevels) {
@@ -124,17 +131,63 @@ public class PersonalChunkProvider implements IChunkProvider {
 
             boolean isBoundaryX, prevBoundaryX, isBoundaryZ, prevBoundaryZ;
             if (gapWidth > 0) {
-                // isBoundaryX: draw at localX=0 → first area chunk after gap (mod == 0)
-                isBoundaryX = intervalX > 0 && mod(chunkX, periodX) == 0;
-                // prevBoundaryX: draw at localX=15 → last area chunk before gap (mod == interval-1)
-                prevBoundaryX = intervalX > 0 && mod(chunkX, periodX) == intervalX - 1;
-                isBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == 0;
-                prevBoundaryZ = intervalZ > 0 && mod(chunkZ, periodZ) == intervalZ - 1;
+                isBoundaryX = intervalX > 0 && modByPoi(chunkX, periodX, dir) == 0;
+                prevBoundaryX = intervalX > 0 && modByPoi(chunkX, periodX, dir) == intervalX - 1;
+                isBoundaryZ = intervalZ > 0 && modByPoi(chunkZ, periodZ, dir) == 0;
+                prevBoundaryZ = intervalZ > 0 && modByPoi(chunkZ, periodZ, dir) == intervalZ - 1;
             } else {
-                isBoundaryX = intervalX > 0 && mod(chunkX, intervalX) == 0;
-                isBoundaryZ = intervalZ > 0 && mod(chunkZ, intervalZ) == 0;
-                prevBoundaryX = intervalX > 0 && mod(chunkX + 1, intervalX) == 0;
-                prevBoundaryZ = intervalZ > 0 && mod(chunkZ + 1, intervalZ) == 0;
+                isBoundaryX = intervalX > 0 && modByPoi(chunkX, intervalX, dir) == 0;
+                isBoundaryZ = intervalZ > 0 && modByPoi(chunkZ, intervalZ, dir) == 0;
+                prevBoundaryX = intervalX > 0 && modByPoi(chunkX + 1, intervalX, dir) == 0;
+                prevBoundaryZ = intervalZ > 0 && modByPoi(chunkZ + 1, intervalZ, dir) == 0;
+            }
+            if (isObbMode) {
+                switch (dir) {
+                    case SE:
+                        prevBoundaryX = false;
+                        prevBoundaryZ = false;
+                        break;
+                    case SW:
+                        isBoundaryX = false;
+                        prevBoundaryZ = false;
+                        break;
+                    case NE:
+                        prevBoundaryX = false;
+                        isBoundaryZ = false;
+                        break;
+                    case NW:
+                        isBoundaryX = false;
+                        isBoundaryZ = false;
+                        break;
+                    case ORIGIN:
+                        if (chunkX >= 0) {
+                            isBoundaryX = false;
+                        }
+                        if (chunkX < 0) {
+                            prevBoundaryX = false;
+                        }
+                        if (chunkZ >= 0) {
+                            isBoundaryZ = false;
+                        }
+                        if (chunkZ < 0) {
+                            prevBoundaryZ = false;
+                        }
+
+                        break;
+                    case AWAY_ORIGIN:
+                        if (chunkX >= 0) {
+                            prevBoundaryX = false;
+                        }
+                        if (chunkX < 0) {
+                            isBoundaryX = false;
+                        }
+                        if (chunkZ >= 0) {
+                            prevBoundaryZ = false;
+                        }
+                        if (chunkZ < 0) {
+                            isBoundaryZ = false;
+                        }
+                }
             }
 
             Block boundaryBlockA = cfg.getBoundaryBlockAResolved();
@@ -242,16 +295,39 @@ public class PersonalChunkProvider implements IChunkProvider {
                 Block centerBlock = cfg.getCenterBlockResolved();
                 int centerMeta = cfg.getCenterMeta();
                 if (centerBlock != null && centerBlock != Blocks.air) {
-                    DimensionConfig.CenterDirection dir = cfg.getCenterDirection();
-                    int dirOffX = (dir == DimensionConfig.CenterDirection.SW
-                            || dir == DimensionConfig.CenterDirection.NW) ? -1 : 0;
-                    int dirOffZ = (dir == DimensionConfig.CenterDirection.NE
-                            || dir == DimensionConfig.CenterDirection.NW) ? -1 : 0;
+                    int dirOffX = 0;
+                    int dirOffZ = 0;
+                    switch (dir) {
+                        case NE:
+                            dirOffX = 0;
+                            dirOffZ = -1;
+                            break;
+                        case NW:
+                            dirOffX = -1;
+                            dirOffZ = -1;
+                            break;
+                        case SE:
+                            dirOffX = 0;
+                            dirOffZ = 0;
+                            break;
+                        case SW:
+                            dirOffX = -1;
+                            dirOffZ = 0;
+                            break;
+                        case ORIGIN:
+                            dirOffX = chunkX >= 0 ? -1 : 0;
+                            dirOffZ = chunkZ >= 0 ? -1 : 0;
+                            break;
+                        case AWAY_ORIGIN:
+                            dirOffX = chunkX >= 0 ? 0 : -1;
+                            dirOffZ = chunkZ >= 0 ? 0 : -1;
+                            break;
+                    }
                     int centerLocalX = intervalX * 8 + dirOffX;
                     int centerLocalZ = intervalZ * 8 + dirOffZ;
 
-                    int modCX = mod(chunkX, periodX);
-                    int modCZ = mod(chunkZ, periodZ);
+                    int modCX = modByPoi(chunkX, periodX, dir);
+                    int modCZ = modByPoi(chunkZ, periodZ, dir);
 
                     if (modCX < intervalX && modCZ < intervalZ) {
                         int blockStartX = modCX * 16;
@@ -286,8 +362,35 @@ public class PersonalChunkProvider implements IChunkProvider {
                 ebs = new ExtendedBlockStorage(platformLevel & ~15, true);
                 chunk.getBlockStorageArray()[yChunk] = ebs;
             }
-            for (int z = 4; z < 13; z++) {
-                for (int x = 4; x < 13; x++) {
+            int xStart = 4;
+            int xEnd = 12;
+            int zStart = 4;
+            int zEnd = 12;
+
+            if (isObbMode) {
+                switch (dir) {
+                    case SE:
+                    case AWAY_ORIGIN:
+                        break;
+                    case SW:
+                        xStart--;
+                        xEnd--;
+                        break;
+                    case NE:
+                        zStart--;
+                        zEnd--;
+                        break;
+                    case NW:
+                    case ORIGIN:
+                        xStart--;
+                        xEnd--;
+                        zStart--;
+                        zEnd--;
+                        break;
+                }
+            }
+            for (int z = zStart; z <= zEnd; z++) {
+                for (int x = xStart; x <= xEnd; x++) {
                     ebs.func_150818_a(x, platformLevel & 15, z, Blocks.double_stone_slab);
                 }
             }
@@ -361,6 +464,67 @@ public class PersonalChunkProvider implements IChunkProvider {
         return m < 0 ? m + b : m;
     }
 
+    private int modByPoi(int a, int b, CenterDirection dir) {
+        if ((dir.equals(CenterDirection.ORIGIN) || dir.equals(CenterDirection.AWAY_ORIGIN)) && a < 0)
+            return mod(a - 1, b);
+        else return mod(a, b);
+    }
+
+    private int getGapOffsetInBlocks(int chunkCoord, int localCoord, int period, int interval, CenterDirection dir) {
+        return (modByPoi(chunkCoord, period, dir) - interval) * 16 + localCoord;
+    }
+
+    private int getObbRoadBoundaryOffset(int widthBlocks, int chunkCoord, CenterDirection dir, boolean xAxis) {
+        boolean useUpperCenter;
+
+        switch (dir) {
+            case SW:
+                useUpperCenter = !xAxis;
+                break;
+            case NE:
+                useUpperCenter = xAxis;
+                break;
+            case NW:
+                useUpperCenter = false;
+                break;
+            case ORIGIN:
+                useUpperCenter = chunkCoord < 0;
+                break;
+            case AWAY_ORIGIN:
+                useUpperCenter = chunkCoord >= 0;
+                break;
+            case SE:
+            default:
+                useUpperCenter = true;
+                break;
+        }
+
+        return useUpperCenter ? 0 : widthBlocks - 1;
+    }
+
+    private int getLogicalRoadOffset(int offsetInGap, int obbBoundaryOffset) {
+        if (obbBoundaryOffset < 0) return offsetInGap;
+        if (offsetInGap == obbBoundaryOffset) return -1;
+        return offsetInGap > obbBoundaryOffset ? offsetInGap - 1 : offsetInGap;
+    }
+
+    private boolean isRoadEdge(int logicalOffset, int roadWidthBlocks) {
+        return logicalOffset == 0 || logicalOffset == roadWidthBlocks - 1;
+    }
+
+    private StripeBlock getBoundaryBlock(int worldX, int worldZ, Block fallbackBlock, int fallbackMeta,
+            DimensionConfig cfg) {
+        Block boundaryBlockA = cfg.getBoundaryBlockAResolved();
+        int boundaryMetaA = cfg.getBoundaryMetaA();
+        Block boundaryBlockB = cfg.getBoundaryBlockBResolved();
+        int boundaryMetaB = cfg.getBoundaryMetaB();
+        boolean hasA = boundaryBlockA != null && boundaryBlockA != Blocks.air;
+        boolean hasB = boundaryBlockB != null && boundaryBlockB != Blocks.air;
+
+        return hasA || hasB ? getStripeBlock(worldX, worldZ, boundaryBlockA, boundaryMetaA, boundaryBlockB, boundaryMetaB)
+                : new StripeBlock(fallbackBlock, fallbackMeta);
+    }
+
     private void generateGapInChunk(Chunk chunk, int chunkX, int chunkZ, int surfaceLevel, DimensionConfig cfg,
             boolean isGapX, boolean isGapZ, int periodX, int periodZ, int gapWidth, int intervalX, int intervalZ) {
         int yChunk = surfaceLevel >> 4;
@@ -381,6 +545,17 @@ public class PersonalChunkProvider implements IChunkProvider {
         if (gapBlockA == null || gapBlockA == Blocks.air) return;
 
         int gapWidthBlocks = gapWidth * 16;
+        int roadWidthBlocks = cfg.isObbModeEnable() ? gapWidthBlocks - 1 : gapWidthBlocks;
+        int obbBoundaryOffsetX = cfg.isObbModeEnable() ? getObbRoadBoundaryOffset(
+                gapWidthBlocks,
+                chunkX,
+                cfg.getCenterDirection(),
+                true) : -1;
+        int obbBoundaryOffsetZ = cfg.isObbModeEnable() ? getObbRoadBoundaryOffset(
+                gapWidthBlocks,
+                chunkZ,
+                cfg.getCenterDirection(),
+                false) : -1;
         int yLocal = surfaceLevel & 15;
 
         for (int localZ = 0; localZ < 16; localZ++) {
@@ -394,28 +569,49 @@ public class PersonalChunkProvider implements IChunkProvider {
                 if (preset == DimensionConfig.GapPreset.ROAD) {
                     boolean isIntersection = isGapX && isGapZ;
                     boolean hasStripe = gapBlockB != null && gapBlockB != Blocks.air;
-                    if (isIntersection) {
-                        // At intersection: draw corner blocks where both edges meet
-                        if (hasStripe) {
-                            int gapOffsetX = mod(chunkX, periodX) - intervalX;
-                            int offsetX = gapOffsetX * 16 + localX;
-                            int gapOffsetZ = mod(chunkZ, periodZ) - intervalZ;
-                            int offsetZ = gapOffsetZ * 16 + localZ;
-                            boolean onEdgeX = offsetX == 0 || offsetX == gapWidthBlocks - 1;
-                            boolean onEdgeZ = offsetZ == 0 || offsetZ == gapWidthBlocks - 1;
-                            if (onEdgeX && onEdgeZ) {
+                    int offsetX = isGapX ? getGapOffsetInBlocks(
+                            chunkX,
+                            localX,
+                            periodX,
+                            intervalX,
+                            cfg.getCenterDirection()) : -1;
+                    int offsetZ = isGapZ ? getGapOffsetInBlocks(
+                            chunkZ,
+                            localZ,
+                            periodZ,
+                            intervalZ,
+                            cfg.getCenterDirection()) : -1;
+
+                    boolean onObbBoundaryX = isGapX && offsetX == obbBoundaryOffsetX;
+                    boolean onObbBoundaryZ = isGapZ && offsetZ == obbBoundaryOffsetZ;
+
+                    if (!isIntersection && (onObbBoundaryX || onObbBoundaryZ)) {
+                        StripeBlock boundary = getBoundaryBlock(worldX, worldZ, gapBlockA, gapMetaA, cfg);
+                        block = boundary.block;
+                        meta = boundary.meta;
+                    } else if (isIntersection) {
+                        int logicalOffsetX = getLogicalRoadOffset(offsetX, obbBoundaryOffsetX);
+                        int logicalOffsetZ = getLogicalRoadOffset(offsetZ, obbBoundaryOffsetZ);
+                        boolean onEdgeX = isRoadEdge(logicalOffsetX, roadWidthBlocks);
+                        boolean onEdgeZ = isRoadEdge(logicalOffsetZ, roadWidthBlocks);
+
+                        if (onObbBoundaryX && onObbBoundaryZ) {
+                            StripeBlock boundary = getBoundaryBlock(worldX, worldZ, gapBlockA, gapMetaA, cfg);
+                            block = boundary.block;
+                            meta = boundary.meta;
+                        } else if (hasStripe) {
+                            if ((onEdgeX || onObbBoundaryX) && (onEdgeZ || onObbBoundaryZ)) {
                                 block = gapBlockB;
                                 meta = gapMetaB;
                             }
                         }
                     } else {
                         if (isGapX && periodX > 0) {
-                            int gapChunkOffset = mod(chunkX, periodX) - intervalX;
-                            int offsetInGap = gapChunkOffset * 16 + localX;
+                            int offsetInGap = getLogicalRoadOffset(offsetX, obbBoundaryOffsetX);
                             StripeBlock road = getRoadBlock(
                                     offsetInGap,
                                     worldZ,
-                                    gapWidthBlocks,
+                                    roadWidthBlocks,
                                     gapBlockA,
                                     gapMetaA,
                                     gapBlockB,
@@ -425,12 +621,11 @@ public class PersonalChunkProvider implements IChunkProvider {
                             block = road.block;
                             meta = road.meta;
                         } else if (isGapZ && periodZ > 0) {
-                            int gapChunkOffset = mod(chunkZ, periodZ) - intervalZ;
-                            int offsetInGap = gapChunkOffset * 16 + localZ;
+                            int offsetInGap = getLogicalRoadOffset(offsetZ, obbBoundaryOffsetZ);
                             StripeBlock road = getRoadBlock(
                                     offsetInGap,
                                     worldX,
-                                    gapWidthBlocks,
+                                    roadWidthBlocks,
                                     gapBlockA,
                                     gapMetaA,
                                     gapBlockB,
@@ -455,20 +650,22 @@ public class PersonalChunkProvider implements IChunkProvider {
         }
     }
 
-    private StripeBlock getRoadBlock(int offsetInGap, int alongRoad, int gapWidthBlocks, Block blockA, int metaA,
+    private StripeBlock getRoadBlock(int offsetInGap, int alongRoad, int roadWidthBlocks, Block blockA, int metaA,
             Block blockB, int metaB, Block blockC, int metaC) {
         boolean hasStripe = blockB != null && blockB != Blocks.air;
         boolean hasDash = blockC != null && blockC != Blocks.air;
 
         // Edge lines (B block)
-        if (hasStripe && (offsetInGap == 0 || offsetInGap == gapWidthBlocks - 1)) {
+        if (hasStripe && isRoadEdge(offsetInGap, roadWidthBlocks)) {
             return new StripeBlock(blockB, metaB);
         }
 
         // Center dashed line (C block)
-        if (hasDash && gapWidthBlocks >= 4) {
-            int center = gapWidthBlocks / 2;
-            if ((offsetInGap == center || offsetInGap == center - 1) && mod(alongRoad + 2, 8) < 4) {
+        if (hasDash && roadWidthBlocks >= 4) {
+            int center = roadWidthBlocks / 2;
+            boolean onCenter = (roadWidthBlocks & 1) == 0 ? offsetInGap == center || offsetInGap == center - 1
+                    : offsetInGap == center;
+            if (onCenter && mod(alongRoad + 2, 8) < 4) {
                 return new StripeBlock(blockC, metaC);
             }
         }

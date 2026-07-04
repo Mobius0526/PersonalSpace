@@ -53,6 +53,7 @@ public class DimensionConfigPackets {
         pkt.writeVarInt(config.getCenterDirection().ordinal());
         pkt.writeString(config.getCenterBlock());
         pkt.writeVarInt(config.getCenterMeta());
+        pkt.writeBoolean(config.isObbModeEnable());
     }
 
     static void readInto(DimensionConfig config, MCDataInput pkt) {
@@ -91,6 +92,7 @@ public class DimensionConfigPackets {
         config.setCenterDirection(DimensionConfig.CenterDirection.fromOrdinal(pkt.readVarInt()));
         config.setCenterBlock(pkt.readString());
         config.setCenterMeta(pkt.readVarInt());
+        config.setObbModeEnable(pkt.readBoolean());
     }
 
     static DimensionConfig fromPacket(MCDataInput pkt) {
